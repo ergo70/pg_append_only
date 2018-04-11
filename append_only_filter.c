@@ -42,7 +42,7 @@ _PG_init(void)
 {
     /* Define custom GUC variable. */
     DefineCustomStringVariable("append_only_filter.append_only_relations",
-                               "Sets the relation(s) to protect "
+                               "Sets the relation(s) which is protected "
                                "against UPDATE and DELETE.",
                                NULL,
                                &append_only_relations,
@@ -107,7 +107,7 @@ protect_function(Query *parse, int cursorOptions, ParamListInfo boundParams)
     else
         result = standard_planner(parse, cursorOptions, boundParams);
 
-    if(append_only_relations != NULL && parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT && parse->commandType != CMD_UTILITY)
+    if(bufsz < 1000 && append_only_relations != NULL && parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT && parse->commandType != CMD_UTILITY)
     {
         rte = (RangeTblEntry *) rt_fetch(parse->resultRelation, parse->rtable);
         target_table = get_rel_name(rte->relid);
