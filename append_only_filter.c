@@ -43,7 +43,7 @@ _PG_init(void)
     /* Define custom GUC variable. */
     DefineCustomStringVariable("append_only_filter.append_only_relations",
                                "Sets the relation(s) which is protected "
-                               "against UPDATE and DELETE.",
+                               "against UPDATE and DELETE. List separated by commata.",
                                NULL,
                                &append_only_relations,
                                NULL,
