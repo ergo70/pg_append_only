@@ -23,14 +23,13 @@
 
 PG_MODULE_MAGIC;
 
-static char *append_only_relation = NULL;
-static char *append_only_relation_schema = NULL;
+static char *append_only_relations = NULL;
 static bool module_loaded = false;
 static planner_hook_type prev_planner_hook = NULL;
 
 static PlannedStmt *protect_function(Query *parse,
-                               int cursorOptions,
-                               ParamListInfo boundParams);
+                                     int cursorOptions,
+                                     ParamListInfo boundParams);
 
 void		_PG_init(void);
 void		_PG_fini(void);
@@ -42,24 +41,11 @@ void
 _PG_init(void)
 {
     /* Define custom GUC variable. */
-    DefineCustomStringVariable("append_only_filter.append_only_relation",
-                               "Sets the Relation which is protected "
+    DefineCustomStringVariable("append_only_filter.append_only_relations",
+                               "Sets the relation(s) which is protected "
                                "against UPDATE and DELETE.",
                                NULL,
-                               &append_only_relation,
-                               NULL,
-                               PGC_SUSET,
-                               0, /* no flags required */
-                               NULL,
-                               NULL,
-                               NULL);
-
-    /* Define custom GUC variable. */
-    DefineCustomStringVariable("append_only_filter.append_only_relation_schema",
-                               "Sets the Schema of the Relation which is protected "
-                               "against UPDATE and DELETE.",
-                               NULL,
-                               &append_only_relation_schema,
+                               &append_only_relations,
                                NULL,
                                PGC_SUSET,
                                0, /* no flags required */
@@ -105,8 +91,15 @@ protect_function(Query *parse, int cursorOptions, ParamListInfo boundParams)
 {
     PlannedStmt *result = NULL;
     RangeTblEntry *rte = NULL;
+    int bufsz = 2*NAMEDATALEN;
     char *target_table = NULL;
     char *target_schema = NULL;
+    char *rest = NULL;
+    char *token = NULL;
+    char *append_only_relations_copy;
+    char target_relation[bufsz];
+    char append_only_relation[bufsz];
+    char format[6] = {0x0,0x0,0x0,0x0,0x0,0x0};
 
     /* this way we can daisy chain planner hooks if necessary */
     if (prev_planner_hook != NULL)
@@ -114,15 +107,35 @@ protect_function(Query *parse, int cursorOptions, ParamListInfo boundParams)
     else
         result = standard_planner(parse, cursorOptions, boundParams);
 
-    if(append_only_relation != NULL && append_only_relation_schema != NULL && parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT && parse->commandType != CMD_UTILITY)
+    if(append_only_relations != NULL && parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT && parse->commandType != CMD_UTILITY)
     {
         rte = (RangeTblEntry *) rt_fetch(parse->resultRelation, parse->rtable);
         target_table = get_rel_name(rte->relid);
         target_schema = get_namespace_name(get_rel_namespace(rte->relid));
 
-        if(target_table != NULL && target_schema != NULL && strcmp(append_only_relation, target_table) == 0 && strcmp(append_only_relation_schema, target_schema) == 0)
+        if(target_table != NULL && target_schema != NULL)
         {
-            ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("Relation %s.%s is append only!", target_schema, target_table)));
+            memset(&target_relation[0], 0x0, bufsz);
+            snprintf(target_relation, bufsz, "%s.%s", target_schema, target_table);
+            snprintf(format, 6, "%%%is", bufsz);
+
+            append_only_relations_copy = palloc0(strlen(append_only_relations + 1));
+            memcpy(append_only_relations_copy, append_only_relations, strlen(append_only_relations));
+
+            token = strtok_r(append_only_relations_copy, ",", &rest);
+
+            while(token != NULL)
+            {
+                // Trim whitespaces
+                sscanf(token, format, append_only_relation);
+
+                if(strcmp(append_only_relation, target_relation) == 0)
+                {
+                    ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("Relation %s is append only!", target_relation)));
+                }
+
+                token = strtok_r(NULL, ",", &rest);
+            }
         }
     }
 
