@@ -116,8 +116,8 @@ protect_function(Query *parse, int cursorOptions, ParamListInfo boundParams)
         if(target_table != NULL && target_schema != NULL)
         {
             memset(&target_relation[0], 0x0, bufsz);
-            snprintf(target_relation, bufsz, "%s.%s", target_schema, target_table);
-            snprintf(format, 6, "%%%is", bufsz);
+            snprintf(target_relation, bufsz - 1, "%s.%s", target_schema, target_table);
+            snprintf(format, 6, "%%%is", bufsz - 1);
 
             append_only_relations_copy = palloc0(strlen(append_only_relations + 1));
             memcpy(append_only_relations_copy, append_only_relations, strlen(append_only_relations));
